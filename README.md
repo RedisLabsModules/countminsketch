@@ -25,16 +25,6 @@ Increments the count for `item` by `value`.
 
 If `key` does not exist, the sketch is initialized using the default width of 2000 and depth of 10 (providing %0.01 error at %0.01 probability).
 
-**Reply:** Simple String, "OK".
-
-### `CMS.QUERY key item [item ...]`
-
-> Time complexity: O(N), where N is the number of items.
- 
-Returns the estimated count for `item`.
- 
-**Reply:** Array of Integers, nil if key or element not found
-
 ### `CMS.QUERY key item [item ...]`
 
 > Time complexity: O(N), where N is the number of items.
