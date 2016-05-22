@@ -253,7 +253,7 @@ int CMSIncrByCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
     const char *item = RedisModule_StringPtrLen(argv[i - 1], &len);
     long long value;
     RedisModule_StringToLongLong(argv[i], &value);
-    s->c++;
+    s->c += value;
     for (int j = 0; j < s->d; j++) {
       long long h = (s->ha[j] * XXH32(item, len, MAGIC) + s->hb[j]) & MAGIC;
       // TODO: check for over/underflow
@@ -346,17 +346,19 @@ int CMSDebugCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
 
 int testSanity(RedisModuleCtx *ctx) {
   RedisModuleCallReply *r;
-  
-  r = RedisModule_Call(ctx,"cms.incrby","ccccccccccc","cms","a","1","b","2","c","3","d","4","e","5");
-  r = RedisModule_Call(ctx,"cms.query","ccccccc","cms","a","b","c","d","e","foo");
-    RMUtil_Assert(RedisModule_CallReplyLength(r) == 6);
+
+  r = RedisModule_Call(ctx, "cms.incrby", "ccccccccccc", "cms", "a", "1", "b",
+                       "2", "c", "3", "d", "4", "e", "5");
+  r = RedisModule_Call(ctx, "cms.query", "ccccccc", "cms", "a", "b", "c", "d",
+                       "e", "foo");
+  RMUtil_Assert(RedisModule_CallReplyLength(r) == 6);
   RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 0), "1");
   RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 1), "2");
   RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 2), "3");
   RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 3), "4");
   RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 4), "5");
   RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 5), "0");
-  
+
   r = RedisModule_Call(ctx, "FLUSHALL", "");
 
   return 0;
@@ -390,8 +392,8 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
   if (RedisModule_CreateCommand(ctx, "cms.initbyerr", CMSInitCommand,
                                 "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
     return REDISMODULE_ERR;
-  if (RedisModule_CreateCommand(ctx, "cms.incrby", CMSIncrByCommand, "write deny-oom",
-                                1, 1, 1) == REDISMODULE_ERR)
+  if (RedisModule_CreateCommand(ctx, "cms.incrby", CMSIncrByCommand,
+                                "write deny-oom", 1, 1, 1) == REDISMODULE_ERR)
     return REDISMODULE_ERR;
   if (RedisModule_CreateCommand(ctx, "cms.query", CMSQueryCommand, "readonly",
                                 1, 1, 1) == REDISMODULE_ERR)
