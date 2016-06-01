@@ -147,6 +147,8 @@ CMSketch *GetCMSketch(RedisModuleCtx *ctx, RedisModuleKey *key) {
   s->ha = (unsigned int *)&dma[off];
   off += sizeof(unsigned int) * s->d;
   s->hb = (unsigned int *)&dma[off];
+
+  return s;
 }
 
 /* CMS.INITBYDIM key width depth
