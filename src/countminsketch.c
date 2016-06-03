@@ -405,5 +405,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
     return REDISMODULE_ERR;
   if (RedisModule_CreateCommand(ctx, "cms.test", TestModule, "write deny-oom",
                                 0, 0, 0) == REDISMODULE_ERR)
-    return REDISMODULE_OK;
+    return REDISMODULE_ERR;
+
+  return REDISMODULE_OK;
 }
