@@ -179,7 +179,7 @@ int CMSInitCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
       RedisModule_ReplyWithError(ctx, "ERR invalid width");
       return REDISMODULE_ERR;
     }
-    if ((RedisModule_StringToLongLong(argv[2], &depth) != REDISMODULE_OK) ||
+    if ((RedisModule_StringToLongLong(argv[3], &depth) != REDISMODULE_OK) ||
         (depth < 1) || (depth > UINT16_MAX)) {
       RedisModule_ReplyWithError(ctx, "ERR invalid depth");
       return REDISMODULE_ERR;
@@ -191,7 +191,7 @@ int CMSInitCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
       RedisModule_ReplyWithError(ctx, "ERR invalid error");
       return REDISMODULE_ERR;
     }
-    if ((RedisModule_StringToDouble(argv[2], &prob) != REDISMODULE_OK) ||
+    if ((RedisModule_StringToDouble(argv[3], &prob) != REDISMODULE_OK) ||
         (prob < 0) || (prob >= 1)) {
       RedisModule_ReplyWithError(ctx, "ERR invalid probabilty");
       return REDISMODULE_ERR;
