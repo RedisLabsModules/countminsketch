@@ -91,11 +91,9 @@ long long ustime(void) {
 /* Creates a new sketch based with given dimensions. */
 CMSketch *NewCMSketch(RedisModuleCtx *ctx, RedisModuleKey *key, int width,
                       int depth) {
-  size_t slen = strlen(CMS_SIGNATURE) + sizeof(long long) +  // count
-                sizeof(int) +                                // width
-                sizeof(int) +                                // depth
-                sizeof(int) * width * depth +                // vector
-                sizeof(unsigned int) * 2 * depth;            // hashes
+  size_t slen = strlen(CMS_SIGNATURE) + sizeof(CMSketch) +
+                sizeof(int) * width * depth +     // vector
+                sizeof(unsigned int) * 2 * depth; // hashes
 
   if (RedisModule_StringTruncate(key, slen) != REDISMODULE_OK) {
     RedisModule_ReplyWithError(ctx,
@@ -113,7 +111,7 @@ CMSketch *NewCMSketch(RedisModuleCtx *ctx, RedisModuleKey *key, int width,
   s->c = 0;
   s->w = width;
   s->d = depth;
-  off += sizeof(long long) + sizeof(int) * 2;
+  off += sizeof(CMSketch);
   s->v = (int *)&dma[off];
   off += sizeof(int) * width * depth;
   s->ha = (unsigned int *)&dma[off];
@@ -141,7 +139,7 @@ CMSketch *GetCMSketch(RedisModuleCtx *ctx, RedisModuleKey *key) {
   }
 
   CMSketch *s = (CMSketch *)&dma[off];
-  off += sizeof(long long) + sizeof(int) * 2;
+  off += sizeof(CMSketch);
   s->v = (int *)&dma[off];
   off += sizeof(int) * s->w * s->d;
   s->ha = (unsigned int *)&dma[off];
