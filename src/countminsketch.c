@@ -64,6 +64,7 @@
 #define RLMODULE_DESC "An approximate frequency counter"
 
 #define CMS_SIGNATURE "COUNTMINSKETCH:1.0:"
+#define CMS_SEED 0
 
 #define MAGIC 2147483647  // 2^31-1 according to the paper
 
@@ -118,7 +119,7 @@ CMSketch *NewCMSketch(RedisModuleCtx *ctx, RedisModuleKey *key, int width,
   off += sizeof(unsigned int) * depth;
   s->hb = (unsigned int *)&dma[off];
 
-  srand(ustime());
+  srand(CMS_SEED);
   for (int i = 0; i < s->d; i++) {
     s->ha[i] = rand() & MAGIC;
     s->hb[i] = rand() & MAGIC;
