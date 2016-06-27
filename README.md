@@ -35,6 +35,14 @@ Returns the estimated count for `item`.
  
 **Reply:** Array of Integers, nil if key or element not found
 
+### `CMS.MERGE destkey numkeys key [key ...] [WEIGHTS weight [weight ...]]`
+
+> Time complexity: O(N), where N is the number of keys.
+
+Merges `numkeys` of `key` into `destkey`. By default, `destkey` holds the sum of the sketches associated with the specified `key`, where all `key` should exist and have the same width and depth. Like Redis's builtin `ZUNIONSTORE` and `ZINTERSTORE` commands, it is possible to weight each sketch using the `WEIGHTS` option.
+
+**Reply:** Simple String, "OK".
+
 ### `CMS.INITBYDIM key width depth`
 
 > Time complexity: O(1)

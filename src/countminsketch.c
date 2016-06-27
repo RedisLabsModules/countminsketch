@@ -266,6 +266,146 @@ int CMSQueryCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
   return REDISMODULE_OK;
 }
 
+/* CMS.MERGE destkey numkeys key [key ...] [WEIGHTS weight [weight ...]]
+*/
+int CMSMergeCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  if (argc < 4) {
+    return RedisModule_WrongArity(ctx);
+  }
+  RedisModule_AutoMemory(ctx);
+
+  long long numkeys;
+  if ((RedisModule_StringToLongLong(argv[2], &numkeys) != REDISMODULE_OK) ||
+      (numkeys < 1)) {
+    RedisModule_ReplyWithError(ctx, "ERR invalid numkeys");
+    return REDISMODULE_ERR;
+  }
+
+  if (RedisModule_IsKeysPositionRequest(ctx)) {
+    RedisModule_KeyAtPos(ctx, 1);
+    for (int i = 0; i < numkeys; i++) {
+      RedisModule_KeyAtPos(ctx, i + 3);
+    }
+    return REDISMODULE_OK;
+  }
+
+  int use_weights;
+  if (argc == 2 * numkeys + 4) {
+    size_t strlen;
+    const char *str = RedisModule_StringPtrLen(argv[numkeys + 3], &strlen);
+    if (strcasecmp("weights", str) != 0) {
+      RedisModule_ReplyWithError(ctx, "ERR syntax error");
+      return REDISMODULE_ERR;
+    }
+    use_weights = 1;
+  } else if (argc == numkeys + 3) {
+    use_weights = 0;
+  } else {
+    return RedisModule_WrongArity(ctx);
+  }
+
+  /* Validate that all values are sketches. */
+  RedisModuleKey **keys = RedisModule_PoolAlloc(ctx, numkeys * sizeof(RedisModuleKey *));
+  CMSketch **sketches = RedisModule_PoolAlloc(ctx, numkeys * sizeof(CMSketch *));
+  long long *weights = RedisModule_PoolAlloc(ctx, numkeys * sizeof(long long));
+
+  for (int i = 0; i < numkeys; i++) {
+    keys[i] = RedisModule_OpenKey(ctx, argv[i + 3], REDISMODULE_READ);
+
+    if (RedisModule_KeyType(keys[i]) != REDISMODULE_KEYTYPE_STRING) {
+      RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+      return REDISMODULE_ERR;
+    }
+
+    sketches[i] = GetCMSketch(ctx, keys[i]);
+    if (!sketches[i]) {
+      RedisModule_ReplyWithError(ctx, "ERR cannot open a key");
+      return REDISMODULE_ERR;
+    }
+
+    if ((sketches[0]->d != sketches[i]->d) ||
+        (sketches[0]->w != sketches[i]->w)) {
+      RedisModule_ReplyWithError(ctx, "ERR incompatible sketch");
+      return REDISMODULE_ERR;
+    }
+
+    if (use_weights) {
+      if (RedisModule_StringToLongLong(argv[i + numkeys + 4], &weights[i]) != REDISMODULE_OK) {
+        RedisModule_ReplyWithError(ctx, "ERR invalid weight");
+        return REDISMODULE_ERR;
+      }
+    } else {
+      weights[i] = 1;
+    }
+  }
+
+  RedisModuleKey *destkey =
+    RedisModule_OpenKey(ctx, argv[1], REDISMODULE_READ | REDISMODULE_WRITE);
+  CMSketch *destsketch;
+
+  if (RedisModule_KeyType(destkey) == REDISMODULE_KEYTYPE_EMPTY) {
+    destsketch = NewCMSketch(ctx, destkey, sketches[0]->w, sketches[0]->d);
+  } else if (RedisModule_KeyType(destkey) == REDISMODULE_KEYTYPE_STRING) {
+    destsketch = GetCMSketch(ctx, destkey);
+
+    if ((destsketch->d != sketches[0]->d) ||
+        (destsketch->w != sketches[0]->w)) {
+      RedisModule_ReplyWithError(ctx, "ERR incompatible sketch");
+      return REDISMODULE_ERR;
+    }
+  } else {
+    RedisModule_ReplyWithError(ctx, REDISMODULE_ERRORMSG_WRONGTYPE);
+    return REDISMODULE_ERR;
+  }
+
+  size_t destkey_strlen;
+  const char *destkey_str = RedisModule_StringPtrLen(argv[1], &destkey_strlen);
+  long long destweight = 0;
+  size_t num_destkey_in_keys = 0;
+
+  for (int i = 0; i < numkeys; i++) {
+    size_t key_strlen;
+    const char *key_str = RedisModule_StringPtrLen(argv[i + 3], &key_strlen);
+
+    if (!strcasecmp(destkey_str, key_str)) {
+      destweight += weights[i];
+
+      RedisModuleKey *tmp_key = keys[i];
+      keys[i] = keys[num_destkey_in_keys];
+      keys[num_destkey_in_keys] = tmp_key;
+
+      CMSketch *tmp_sketch = sketches[i];
+      sketches[i] = sketches[num_destkey_in_keys];
+      sketches[num_destkey_in_keys] = tmp_sketch;
+
+      long long tmp_weight = weights[i];
+      weights[i] = weights[num_destkey_in_keys];
+      weights[num_destkey_in_keys] = tmp_weight;
+
+      num_destkey_in_keys++;
+    }
+  }
+
+  for (int i = 0; i < destsketch->d; i++) {
+    for (int j = 0; j < destsketch->w; j++) {
+      destsketch->v[i * destsketch->w + j] *= destweight;
+    }
+  }
+
+  for (int i = num_destkey_in_keys; i < numkeys; i++) {
+    for (int j = 0; j < destsketch->d; j++) {
+      for (int k = 0; k < destsketch->w; k++) {
+        destsketch->v[j * sketches[i]->w + k] +=
+          weights[i] * sketches[i]->v[j * sketches[i]->w + k];
+      }
+    }
+  }
+
+  RedisModule_ReplyWithSimpleString(ctx, "OK");
+  return REDISMODULE_OK;
+}
+
+
 /* CMS.DEBUG key
 */
 int CMSDebugCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
@@ -319,6 +459,18 @@ int testSanity(RedisModuleCtx *ctx) {
   RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 4), "5");
   RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 5), "0");
 
+  r = RedisModule_Call(ctx, "cms.merge", "ccccccc", "cms", "2", "cms", "cms",
+                       "WEIGHTS", "1", "2");
+  r = RedisModule_Call(ctx, "cms.query", "ccccccc", "cms", "a", "b", "c", "d",
+                       "e", "foo");
+  RMUtil_Assert(RedisModule_CallReplyLength(r) == 6);
+  RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 0), "3");
+  RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 1), "6");
+  RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 2), "9");
+  RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 3), "12");
+  RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 4), "15");
+  RMUtil_AssertReplyEquals(RedisModule_CallReplyArrayElement(r, 5), "0");
+
   r = RedisModule_Call(ctx, "FLUSHALL", "");
 
   return 0;
@@ -357,6 +509,9 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx) {
     return REDISMODULE_ERR;
   if (RedisModule_CreateCommand(ctx, "cms.query", CMSQueryCommand, "readonly",
                                 1, 1, 1) == REDISMODULE_ERR)
+    return REDISMODULE_ERR;
+  if (RedisModule_CreateCommand(ctx, "cms.merge", CMSMergeCommand,
+                                "write deny-oom getkeys-api", 0, 0, 0) == REDISMODULE_ERR)
     return REDISMODULE_ERR;
   if (RedisModule_CreateCommand(ctx, "cms.debug", CMSDebugCommand, "readonly",
                                 2, 2, 1) == REDISMODULE_ERR)
