@@ -1,3 +1,6 @@
+Update: this project has been suspended and superceded by http://rebloom.io
+===
+
 countminsketch: an approximate items counter Redis module
 ===
 
